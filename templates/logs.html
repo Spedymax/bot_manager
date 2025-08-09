@@ -17,4 +17,8 @@ socket.on("log", data => {
         log.scrollTop = log.scrollHeight;
     }
 });
+
+window.onload = function() {
+        window.scrollTo(0, document.body.scrollHeight);
+    };
 </script>
