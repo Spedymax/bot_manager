@@ -1,12 +1,14 @@
-from flask import Flask, render_template, redirect, url_for
+from flask import Flask, render_template, redirect, url_for, jsonify
 from flask_socketio import SocketIO
 import subprocess, os, yaml, psutil, threading, time
+from collections import deque
 
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode='eventlet')
 BOTS_DIR = "/home/spedymax/bot_manager/bots"
+LOG_HISTORY_LINES = 200
 
-# Храним процессы ботов, чтобы потом можно было их стопать
+# Храним процессы ботов
 running_processes = {}
 
 def load_bots():
@@ -24,6 +26,14 @@ def load_bots():
 def is_running(bot):
     return bot['name'] in running_processes and running_processes[bot['name']].poll() is None
 
+def stream_logs(bot, process):
+    """Читает stdout процесса и отправляет в Socket.IO + файл"""
+    with open(bot['log'], "a", encoding="utf-8") as log_file:
+        for line in process.stdout:
+            log_file.write(line)
+            log_file.flush()
+            socketio.emit("log", {"bot": bot['name'], "message": line})
+
 def start_bot(bot):
     if is_running(bot):
         return
@@ -38,14 +48,7 @@ def start_bot(bot):
     )
     running_processes[bot['name']] = process
 
-    def stream_logs():
-        with open(bot['log'], "a", encoding="utf-8") as log_file:
-            for line in process.stdout:
-                log_file.write(line)
-                log_file.flush()
-                socketio.emit("log", {"bot": bot['name'], "message": line})
-
-    threading.Thread(target=stream_logs, daemon=True).start()
+    threading.Thread(target=stream_logs, args=(bot, process), daemon=True).start()
     socketio.emit("log", {"bot": bot['name'], "message": "Started\n"})
 
 def stop_bot(bot):
@@ -53,6 +56,10 @@ def stop_bot(bot):
         return
     process = running_processes[bot['name']]
     process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
     socketio.emit("log", {"bot": bot['name'], "message": f"Stopped pid {process.pid}\n"})
     del running_processes[bot['name']]
 
@@ -64,6 +71,13 @@ def restart_bot(bot):
 def update_bot(bot):
     subprocess.run(["git", "-C", bot['repo'], "pull", "--rebase"])
     socketio.emit("log", {"bot": bot['name'], "message": "Updated\n"})
+
+def get_last_log_lines(path, num_lines=200):
+    """Возвращает последние N строк лога"""
+    if not os.path.exists(path):
+        return []
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        return list(deque(f, maxlen=num_lines))
 
 @app.route("/")
 def index():
@@ -103,6 +117,14 @@ def update_route(name):
 @app.route("/logs/<name>")
 def logs_route(name):
     return render_template("logs.html", bot=name)
+
+@app.route("/logs_history/<name>")
+def logs_history(name):
+    bots = load_bots()
+    if name not in bots:
+        return jsonify([])
+    lines = get_last_log_lines(bots[name]['log'], LOG_HISTORY_LINES)
+    return jsonify(lines)
 
 def monitor_loop():
     while True:
