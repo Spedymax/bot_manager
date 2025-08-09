@@ -6,6 +6,7 @@ from collections import deque
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode='eventlet')
 BOTS_DIR = "/home/spedymax/bot_manager/bots"
+LOGS_DIR = "/home/spedymax/logs"
 LOG_HISTORY_LINES = 200
 
 # Храним процессы ботов
@@ -14,17 +15,28 @@ running_processes = {}
 def load_bots():
     bots = {}
     os.makedirs(BOTS_DIR, exist_ok=True)
+    os.makedirs(LOGS_DIR, exist_ok=True)
     for file in os.listdir(BOTS_DIR):
         if file.endswith(".yml"):
             with open(os.path.join(BOTS_DIR, file)) as f:
                 bot = yaml.safe_load(f)
                 if 'log' not in bot or not bot['log']:
-                    bot['log'] = f"/home/spedymax/logs/{bot['name']}.log"
+                    bot['log'] = os.path.join(LOGS_DIR, f"{bot['name']}.log")
                 bots[bot['name']] = bot
     return bots
 
 def is_running(bot):
     return bot['name'] in running_processes and running_processes[bot['name']].poll() is None
+
+def kill_existing(bot):
+    """Убивает все процессы с этим main.py"""
+    for p in psutil.process_iter(['pid', 'cmdline']):
+        cmd = p.info.get('cmdline') or []
+        if isinstance(cmd, list) and bot['path'] in cmd:
+            try:
+                psutil.Process(p.info['pid']).terminate()
+            except Exception:
+                pass
 
 def stream_logs(bot, process):
     """Читает stdout процесса и отправляет в Socket.IO + файл"""
@@ -35,8 +47,9 @@ def stream_logs(bot, process):
             socketio.emit("log", {"bot": bot['name'], "message": line})
 
 def start_bot(bot):
-    if is_running(bot):
-        return
+    # Убиваем все старые процессы
+    kill_existing(bot)
+
     os.makedirs(os.path.dirname(bot['log']), exist_ok=True)
 
     process = subprocess.Popen(
@@ -52,6 +65,7 @@ def start_bot(bot):
     socketio.emit("log", {"bot": bot['name'], "message": "Started\n"})
 
 def stop_bot(bot):
+    kill_existing(bot)
     if not is_running(bot):
         return
     process = running_processes[bot['name']]
@@ -73,11 +87,10 @@ def update_bot(bot):
     socketio.emit("log", {"bot": bot['name'], "message": "Updated\n"})
 
 def get_last_log_lines(path, num_lines=200):
-    """Возвращает последние N строк лога"""
     if not os.path.exists(path):
-        return []
+        return ["Нет логов\n"]
     with open(path, "r", encoding="utf-8", errors="replace") as f:
-        return list(deque(f, maxlen=num_lines))
+        return list(deque(f, maxlen=num_lines)) or ["Нет логов\n"]
 
 @app.route("/")
 def index():
@@ -122,7 +135,7 @@ def logs_route(name):
 def logs_history(name):
     bots = load_bots()
     if name not in bots:
-        return jsonify([])
+        return jsonify(["Нет такого бота\n"])
     lines = get_last_log_lines(bots[name]['log'], LOG_HISTORY_LINES)
     return jsonify(lines)
 
@@ -131,6 +144,7 @@ def monitor_loop():
         bots = load_bots()
         for bot in bots.values():
             if not is_running(bot):
+                kill_existing(bot)  # убиваем висяки перед рестартом
                 socketio.emit("log", {"bot": bot['name'], "message": "Bot not running, attempting start\n"})
                 start_bot(bot)
         time.sleep(5)
