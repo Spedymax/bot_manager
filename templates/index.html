@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Bot Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="p-4">
+    <h1>Bot Manager</h1>
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Bot Name</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for bot in bots %}
+            <tr>
+                <td>{{ bot.name }}</td>
+                <td>
+                    {% if bot.running %}
+                        <span class="badge bg-success">Running</span>
+                    {% else %}
+                        <span class="badge bg-danger">Stopped</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="/start/{{ bot.name }}" class="btn btn-success btn-sm">Start</a>
+                    <a href="/stop/{{ bot.name }}" class="btn btn-danger btn-sm">Stop</a>
+                    <a href="/restart/{{ bot.name }}" class="btn btn-warning btn-sm">Restart</a>
+                    <a href="/update/{{ bot.name }}" class="btn btn-info btn-sm">Update</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
