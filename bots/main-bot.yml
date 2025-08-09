@@ -2,3 +2,4 @@ name: main-bot
 path: /home/spedymax/tg-bot/src/main.py
 venv: /home/spedymax/venv/bin/python3
 repo: /home/spedymax/tg-bot
+log: /home/spedymax/logs/main-bot.log

@@ -6,21 +6,16 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="p-4">
-    <h1>Bot Manager</h1>
-    <table class="table table-bordered">
+    <h1>Bot Manager 2.0</h1>
+    <table class="table">
         <thead>
-            <tr>
-                <th>Bot Name</th>
-                <th>Status</th>
-                <th>Actions</th>
-            </tr>
+            <tr><th>Name</th><th>Status</th><th>Actions</th></tr>
         </thead>
         <tbody>
-            {% for bot in bots %}
+        {% for bot in bots %}
             <tr>
                 <td>{{ bot.name }}</td>
-                <td>
-                    {% if bot.running %}
+                <td>{% if bot.running %}
                         <span class="badge bg-success">Running</span>
                     {% else %}
                         <span class="badge bg-danger">Stopped</span>
@@ -31,9 +26,10 @@
                     <a href="/stop/{{ bot.name }}" class="btn btn-danger btn-sm">Stop</a>
                     <a href="/restart/{{ bot.name }}" class="btn btn-warning btn-sm">Restart</a>
                     <a href="/update/{{ bot.name }}" class="btn btn-info btn-sm">Update</a>
+                    <a href="/logs/{{ bot.name }}" class="btn btn-secondary btn-sm">Logs</a>
                 </td>
             </tr>
-            {% endfor %}
+        {% endfor %}
         </tbody>
     </table>
 </body>

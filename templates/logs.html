@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Logs - {{ bot }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+</head>
+<body class="p-4">
+    <h1>Logs for {{ bot }}</h1>
+    <pre id="log-output" style="height: 80vh; overflow-y: scroll; background: #111; color: #0f0; padding: 10px;"></pre>
+    <script>
+        const socket = io();
+        socket.emit("subscribe", { bot: "{{ bot }}" });
+        socket.on("log", data => {
+            if(data.bot === "{{ bot }}") {
+                const log = document.getElementById("log-output");
+                log.textContent += data.message;
+                log.scrollTop = log.scrollHeight;
+            }
+        });
+    </script>
+</body>
+</html>
