@@ -1,10 +1,27 @@
 from flask import Flask, render_template, redirect, url_for
 from flask_socketio import SocketIO
 import subprocess, os, yaml, psutil, threading, time
+from threading import Thread
 
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode='eventlet')
 BOTS_DIR = "/home/spedymax/bot_manager/bots"
+
+bots = {
+    "main-bot": "/home/spedymax/logs/main-bot.log",
+    # сюда можешь добавить другие боты: "bot2": "/путь/к/логу2.log"
+}
+
+def tail_log(path, bot_name):
+    with open(path, "r") as f:
+        f.seek(0, os.SEEK_END)  # стартуем с конца файла
+        while True:
+            line = f.readline()
+            if line:
+                socketio.emit("log", {"bot": bot_name, "message": line})
+            else:
+                time.sleep(0.1)
+
 
 def load_bots():
     bots = {}
@@ -21,10 +38,7 @@ def load_bots():
 def is_running(bot):
     for p in psutil.process_iter(['cmdline']):
         cmd = p.info.get('cmdline') or []
-        if isinstance(cmd, list):
-            cmdline = " ".join(cmd)
-        else:
-            cmdline = str(cmd)
+        cmdline = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
         if bot['path'] in cmdline:
             return True
     return False
@@ -38,10 +52,7 @@ def start_bot(bot):
 def stop_bot(bot):
     for p in psutil.process_iter(['pid','cmdline']):
         cmd = p.info.get('cmdline') or []
-        if isinstance(cmd, list):
-            cmdline = " ".join(cmd)
-        else:
-            cmdline = str(cmd)
+        cmdline = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
         if bot['path'] in cmdline:
             try:
                 psutil.Process(p.info['pid']).terminate()
@@ -130,5 +141,8 @@ def monitor_loop():
         time.sleep(5)
 
 if __name__ == "__main__":
+    for bot_name, log_path in bots.items():
+        if os.path.exists(log_path):
+            Thread(target=tail_log, args=(log_path, bot_name), daemon=True).start()
     threading.Thread(target=monitor_loop, daemon=True).start()
     socketio.run(app, host="0.0.0.0", port=8888)
