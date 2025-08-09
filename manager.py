@@ -1,27 +1,13 @@
 from flask import Flask, render_template, redirect, url_for
 from flask_socketio import SocketIO
 import subprocess, os, yaml, psutil, threading, time
-from threading import Thread
 
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode='eventlet')
 BOTS_DIR = "/home/spedymax/bot_manager/bots"
 
-bots = {
-    "main-bot": "/home/spedymax/logs/main-bot.log",
-    # сюда можешь добавить другие боты: "bot2": "/путь/к/логу2.log"
-}
-
-def tail_log(path, bot_name):
-    with open(path, "r") as f:
-        f.seek(0, os.SEEK_END)  # стартуем с конца файла
-        while True:
-            line = f.readline()
-            if line:
-                socketio.emit("log", {"bot": bot_name, "message": line})
-            else:
-                time.sleep(0.1)
-
+# Храним процессы ботов, чтобы потом можно было их стопать
+running_processes = {}
 
 def load_bots():
     bots = {}
@@ -36,29 +22,39 @@ def load_bots():
     return bots
 
 def is_running(bot):
-    for p in psutil.process_iter(['cmdline']):
-        cmd = p.info.get('cmdline') or []
-        cmdline = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
-        if bot['path'] in cmdline:
-            return True
-    return False
+    return bot['name'] in running_processes and running_processes[bot['name']].poll() is None
 
 def start_bot(bot):
+    if is_running(bot):
+        return
     os.makedirs(os.path.dirname(bot['log']), exist_ok=True)
-    log_fd = open(bot['log'], 'a')
-    subprocess.Popen([bot['venv'], bot['path']], stdout=log_fd, stderr=log_fd, close_fds=True)
+
+    process = subprocess.Popen(
+        [bot['venv'], bot['path']],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1
+    )
+    running_processes[bot['name']] = process
+
+    def stream_logs():
+        with open(bot['log'], "a", encoding="utf-8") as log_file:
+            for line in process.stdout:
+                log_file.write(line)
+                log_file.flush()
+                socketio.emit("log", {"bot": bot['name'], "message": line})
+
+    threading.Thread(target=stream_logs, daemon=True).start()
     socketio.emit("log", {"bot": bot['name'], "message": "Started\n"})
 
 def stop_bot(bot):
-    for p in psutil.process_iter(['pid','cmdline']):
-        cmd = p.info.get('cmdline') or []
-        cmdline = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
-        if bot['path'] in cmdline:
-            try:
-                psutil.Process(p.info['pid']).terminate()
-                socketio.emit("log", {"bot": bot['name'], "message": f"Stopped pid {p.info['pid']}\n"})
-            except Exception as e:
-                socketio.emit("log", {"bot": bot['name'], "message": f"Error stopping {e}\n"})
+    if not is_running(bot):
+        return
+    process = running_processes[bot['name']]
+    process.terminate()
+    socketio.emit("log", {"bot": bot['name'], "message": f"Stopped pid {process.pid}\n"})
+    del running_processes[bot['name']]
 
 def restart_bot(bot):
     stop_bot(bot)
@@ -66,7 +62,7 @@ def restart_bot(bot):
     start_bot(bot)
 
 def update_bot(bot):
-    subprocess.run(["git","-C", bot['repo'], "pull", "--rebase"])
+    subprocess.run(["git", "-C", bot['repo'], "pull", "--rebase"])
     socketio.emit("log", {"bot": bot['name'], "message": "Updated\n"})
 
 @app.route("/")
@@ -108,29 +104,6 @@ def update_route(name):
 def logs_route(name):
     return render_template("logs.html", bot=name)
 
-@socketio.on("subscribe")
-def handle_subscribe(data):
-    bot_name = data.get('bot')
-    bots = load_bots()
-    if bot_name not in bots:
-        return
-    bot = bots[bot_name]
-    def tail_log():
-        os.makedirs(os.path.dirname(bot['log']), exist_ok=True)
-        open(bot['log'], 'a').close()
-        try:
-            with open(bot['log'], 'r', encoding='utf-8', errors='replace') as f:
-                f.seek(0, os.SEEK_END)
-                while True:
-                    line = f.readline()
-                    if not line:
-                        time.sleep(0.5)
-                        continue
-                    socketio.emit("log", {"bot": bot_name, "message": line})
-        except Exception as e:
-            socketio.emit("log", {"bot": bot_name, "message": f"Tail error: {e}\n"})
-    threading.Thread(target=tail_log, daemon=True).start()
-
 def monitor_loop():
     while True:
         bots = load_bots()
@@ -141,8 +114,5 @@ def monitor_loop():
         time.sleep(5)
 
 if __name__ == "__main__":
-    for bot_name, log_path in bots.items():
-        if os.path.exists(log_path):
-            Thread(target=tail_log, args=(log_path, bot_name), daemon=True).start()
     threading.Thread(target=monitor_loop, daemon=True).start()
     socketio.run(app, host="0.0.0.0", port=8888)
