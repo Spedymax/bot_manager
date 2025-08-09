@@ -7,7 +7,7 @@ app = Flask(__name__)
 socketio = SocketIO(app, async_mode='eventlet')
 BOTS_DIR = "/home/spedymax/bot_manager/bots"
 LOGS_DIR = "/home/spedymax/logs"
-LOG_HISTORY_LINES = 200
+LOG_HISTORY_LINES = 50
 
 # Храним процессы ботов
 running_processes = {}
