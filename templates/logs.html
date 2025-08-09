@@ -1,9 +1,6 @@
 <script>
 const socket = io();
 const log = document.getElementById("log-output");
-setTimeout(() => {
-    log.scrollTop = log.scrollHeight;
-}, 1);
 
 // Подгрузка последних строк истории
 fetch(`/logs_history/{{ bot }}`)

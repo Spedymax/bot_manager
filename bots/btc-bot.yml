@@ -1,0 +1,5 @@
+name: btc-bot
+path: /home/spedymax/tg-bot/scripts/btc.py
+venv: /home/spedymax/venv/bin/python3
+repo: /home/spedymax/tg-bot
+log: /home/spedymax/logs/btc-bot.log
