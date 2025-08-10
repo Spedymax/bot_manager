@@ -1,0 +1,5 @@
+name: casino
+path: /home/spedymax/tg-bot/run_miniapp.py
+venv: /home/spedymax/venv/bin/python3
+repo: /home/spedymax/tg-bot
+log: /home/spedymax/logs/casino.log
