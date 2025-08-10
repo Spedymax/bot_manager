@@ -1,46 +1,150 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Bot Manager 2.0</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+<meta charset="utf-8">
+<title>Bot Manager 4.1</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+<style>
+  body.light-mode { background-color: #f8f9fa; color: #212529; }
+  body.dark-mode { background-color: #121212; color: #f0f0f0; }
+  .bot-card {
+    border-radius: 12px;
+    transition: transform 0.2s, background-color 0.3s;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  }
+  .bot-card:hover { transform: translateY(-3px); }
+  .light-mode .bot-card { background-color: #fff; }
+  .dark-mode .bot-card { background-color: #1e1e1e; }
+  .bot-status {
+    font-size: 0.9em;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-weight: 500;
+  }
+  .log-container {
+    border-radius: 8px;
+    padding: 10px;
+    height: 300px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 14px;
+    white-space: pre-wrap;
+    box-shadow: inset 0 0 4px rgba(0,0,0,0.05);
+  }
+  .light-mode .log-container { background: #fff; color: #212529; }
+  .dark-mode .log-container { background: #000; color: #0f0; }
+</style>
 </head>
-<body class="bg-light p-4">
-  <div class="container">
-    <h1 class="mb-4 text-primary"><i class="bi bi-robot"></i> Bot Manager 2.0</h1>
-    <table class="table table-hover align-middle shadow-sm bg-white rounded">
-      <thead class="table-primary">
-        <tr>
-          <th>Name</th>
-          <th>Status</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for bot in bots %}
-        <tr>
-          <td><strong>{{ bot.name }}</strong></td>
-          <td>
-            {% if bot.running %}
-              <span class="badge bg-success"><i class="bi bi-play-fill"></i> Running</span>
-            {% else %}
-              <span class="badge bg-danger"><i class="bi bi-stop-fill"></i> Stopped</span>
-            {% endif %}
-          </td>
-          <td>
-            <div class="btn-group btn-group-sm">
-              <a href="/start/{{ bot.name }}" class="btn btn-success"><i class="bi bi-play"></i></a>
-              <a href="/stop/{{ bot.name }}" class="btn btn-danger"><i class="bi bi-stop"></i></a>
-              <a href="/restart/{{ bot.name }}" class="btn btn-warning"><i class="bi bi-arrow-repeat"></i></a>
-              <a href="/update/{{ bot.name }}" class="btn btn-info text-white"><i class="bi bi-download"></i></a>
-              <a href="/logs/{{ bot.name }}" class="btn btn-secondary"><i class="bi bi-terminal"></i></a>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<body class="light-mode p-4">
+
+<div class="container">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="text-primary">Bot Manager 4.1</h1>
+    <button class="btn btn-outline-secondary" onclick="toggleTheme()">🌞 / 🌙</button>
   </div>
+
+  <div class="row g-4" id="bots-container">
+    {% for bot in bots %}
+    <div class="col-md-4" id="bot-card-{{ bot.name }}">
+      <div class="bot-card p-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h5 class="mb-0">{{ bot.name }}</h5>
+          {% if bot.running %}
+            <span class="bot-status bg-success text-white">Running</span>
+          {% else %}
+            <span class="bot-status bg-danger text-white">Stopped</span>
+          {% endif %}
+        </div>
+        <div class="btn-group w-100 mb-2">
+          <button class="btn btn-success" onclick="controlBot('{{ bot.name }}','start')">Start</button>
+          <button class="btn btn-danger" onclick="controlBot('{{ bot.name }}','stop')">Stop</button>
+          <button class="btn btn-warning" onclick="controlBot('{{ bot.name }}','restart')">Restart</button>
+          <button class="btn btn-info text-white" onclick="controlBot('{{ bot.name }}','update')">Update</button>
+          <button class="btn btn-secondary" onclick="showLogs('{{ bot.name }}')">Logs</button>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Логи -->
+  <div id="logs-section" class="mt-4" style="display:none;">
+    <h5 class="mb-2">Logs: <span id="logs-bot-name"></span></h5>
+    <div id="log-output" class="log-container"></div>
+  </div>
+</div>
+
+<script>
+const socket = io();
+let currentBot = null;
+let autoScroll = true;
+
+// Тема
+function toggleTheme() {
+  const body = document.body;
+  if (body.classList.contains("light-mode")) {
+    body.classList.remove("light-mode");
+    body.classList.add("dark-mode");
+    localStorage.setItem("theme", "dark");
+  } else {
+    body.classList.remove("dark-mode");
+    body.classList.add("light-mode");
+    localStorage.setItem("theme", "light");
+  }
+}
+if (localStorage.getItem("theme") === "dark") {
+  document.body.classList.remove("light-mode");
+  document.body.classList.add("dark-mode");
+}
+
+// Управление ботами
+function controlBot(bot, action) {
+  fetch(`/${action}/${bot}`).then(() => {});
+}
+
+// Показ логов
+function showLogs(bot) {
+  currentBot = bot;
+  document.getElementById("logs-bot-name").textContent = bot;
+  document.getElementById("logs-section").style.display = "block";
+  fetch(`/logs_history/${bot}`)
+    .then(r => r.json())
+    .then(lines => {
+      const log = document.getElementById("log-output");
+      log.textContent = lines.join("");
+      log.scrollTop = log.scrollHeight;
+    });
+}
+
+// Автоскролл
+document.getElementById("log-output").addEventListener("scroll", function() {
+  autoScroll = this.scrollTop + this.clientHeight >= this.scrollHeight - 5;
+});
+
+// Логи в реальном времени
+socket.on("log", data => {
+  if (data.bot === currentBot) {
+    const log = document.getElementById("log-output");
+    log.textContent += data.message;
+    if (autoScroll) log.scrollTop = log.scrollHeight;
+  }
+});
+
+// Обновление статуса
+socket.on("status", data => {
+  const card = document.querySelector(`#bot-card-${data.bot} .bot-status`);
+  if (card) {
+    if (data.running) {
+      card.className = "bot-status bg-success text-white";
+      card.textContent = "Running";
+    } else {
+      card.className = "bot-status bg-danger text-white";
+      card.textContent = "Stopped";
+    }
+  }
+});
+</script>
+
 </body>
 </html>
