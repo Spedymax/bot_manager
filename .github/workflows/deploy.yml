@@ -1,0 +1,21 @@
+name: Deploy Telegram Bot Manager
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Перейти в папку бота и обновить код
+        run: cd /srv/apps/bot_manager && git pull
+
+      - name: Обновить ТГ ботов
+        run: |
+          cd /srv/bots/tg-bot && git pull
+          ./venv/bin/pip install -r requirements.txt
+
+      - name: Перезапустить бота
+        run: sudo systemctl restart bot-manager.service
